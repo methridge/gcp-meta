@@ -1,7 +1,9 @@
 package main
 
 import (
+	"embed"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"text/template"
 
@@ -83,11 +85,25 @@ type Index struct {
 	Tags     []string
 }
 
+//go:embed static
+var staticFiles embed.FS
+
+//go:embed templates/index.html
+var indexFile string
+
+//go:embed templates/err.html
+var errFile string
+
 // This example demonstrates how to use your own transport when using this package.
 func main() {
+
+	fsys, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		fmt.Print(err.Error())
+	}
 	http.Handle("/static/",
 		http.StripPrefix("/static/",
-			http.FileServer(http.Dir("static"))))
+			http.FileServer(http.FS(fsys))))
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if metadata.OnGCE() {
@@ -102,15 +118,17 @@ func main() {
 
 			index := Index{h, t}
 
-			template := template.Must(template.ParseFiles("templates/index.html"))
+			// template := template.Must(template.ParseFiles("templates/index.html"))
+			template := template.Must(template.New("index").Parse(indexFile))
 
-			if err := template.ExecuteTemplate(w, "index.html", index); err != nil {
+			if err := template.ExecuteTemplate(w, "index", index); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 		} else {
-			template := template.Must(template.ParseFiles("templates/err.html"))
+			template := template.Must(template.New("err").Parse(errFile))
+			// template := template.Must(template.ParseFiles("templates/err.html"))
 
-			if err := template.ExecuteTemplate(w, "err.html", nil); err != nil {
+			if err := template.ExecuteTemplate(w, "err", nil); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 		}
